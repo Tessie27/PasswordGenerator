@@ -13,7 +13,7 @@ A modern, secure desktop password generator built with Python and PyQt5. Feature
 
 | Light Theme | Dark Theme |
 |---|---|
-| ![Light](light_mode.png) | ![Dark](dark_mode.png) |
+| ![Light](white_mode.png) | ![Dark](dark_mode.png) |
 
 ---
 
@@ -160,3 +160,4 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-%230077B5.svg?logo=linkedin&logoColor=white)](https://linkedin.com/in/letezz-khan-722397159/)
 [![Email](https://img.shields.io/badge/Email-D14836?logo=gmail&logoColor=white)](mailto:letezzkhan@gmail.com)
+
