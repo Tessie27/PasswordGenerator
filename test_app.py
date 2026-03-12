@@ -1,44 +1,19 @@
 import pytest
 import string
-import secrets
+import math
+from generator_logic import (
+    build_character_pool,
+    get_pool_size,
+    generate_diverse_password,
+    calculate_entropy,
+    score_password_strength,
+    validate_custom_password,
+    SPECIAL_CHARS,
+    COMMON_PASSWORDS,
+)
 
-# ─── Test the core logic WITHOUT needing PyQt5 or GUI ──────────────
-
-# Copy the pure logic functions here so we can test them without GUI
-SPECIAL_CHARS = "!@#$%^&*()_+-=[]{}|;:,.<>?"
-
-def build_character_pool(lowercase=True, uppercase=True, numbers=True, special=True):
-    char_pool = ""
-    if lowercase:
-        char_pool += string.ascii_lowercase
-    if uppercase:
-        char_pool += string.ascii_uppercase
-    if numbers:
-        char_pool += string.digits
-    if special:
-        char_pool += SPECIAL_CHARS
-    return char_pool
-
-def generate_diverse_password(char_pool, length, lowercase=True, uppercase=True, numbers=True, special=True):
-    password_chars = []
-    if lowercase:
-        password_chars.append(secrets.choice(string.ascii_lowercase))
-    if uppercase:
-        password_chars.append(secrets.choice(string.ascii_uppercase))
-    if numbers:
-        password_chars.append(secrets.choice(string.digits))
-    if special:
-        password_chars.append(secrets.choice(SPECIAL_CHARS))
-    remaining_length = length - len(password_chars)
-    for _ in range(remaining_length):
-        password_chars.append(secrets.choice(char_pool))
-    secrets.SystemRandom().shuffle(password_chars)
-    return ''.join(password_chars)
-
-# ─── Character Pool Tests ──────────────────────────────────────────
 
 def test_pool_all_options():
-    """All options enabled should include all character types"""
     pool = build_character_pool()
     assert any(c in string.ascii_lowercase for c in pool)
     assert any(c in string.ascii_uppercase for c in pool)
@@ -46,7 +21,6 @@ def test_pool_all_options():
     assert any(c in SPECIAL_CHARS for c in pool)
 
 def test_pool_lowercase_only():
-    """Only lowercase selected should only have lowercase"""
     pool = build_character_pool(uppercase=False, numbers=False, special=False)
     assert pool == string.ascii_lowercase
 
@@ -59,127 +33,143 @@ def test_pool_numbers_only():
     assert pool == string.digits
 
 def test_pool_empty_when_nothing_selected():
-    """No options selected should return empty pool"""
     pool = build_character_pool(lowercase=False, uppercase=False, numbers=False, special=False)
     assert pool == ""
 
-# ─── Password Generation Tests ─────────────────────────────────────
+def test_pool_size_all():
+    size = get_pool_size()
+    assert size == 26 + 26 + 10 + len(SPECIAL_CHARS)
+
+def test_pool_size_lowercase_only():
+    assert get_pool_size(uppercase=False, numbers=False, special=False) == 26
 
 def test_password_correct_length():
-    """Generated password must match requested length"""
-    pool = build_character_pool()
-    password = generate_diverse_password(pool, 16)
+    password = generate_diverse_password(16)
     assert len(password) == 16
 
 def test_password_min_length():
-    """Minimum length password (8 chars) should work"""
-    pool = build_character_pool()
-    password = generate_diverse_password(pool, 8)
+    password = generate_diverse_password(8)
     assert len(password) == 8
 
 def test_password_max_length():
-    """Maximum length password (127 chars) should work"""
-    pool = build_character_pool()
-    password = generate_diverse_password(pool, 127)
+    password = generate_diverse_password(127)
     assert len(password) == 127
 
 def test_password_has_uppercase():
-    """Password should contain at least one uppercase letter"""
-    pool = build_character_pool()
-    password = generate_diverse_password(pool, 16)
+    password = generate_diverse_password(16)
     assert any(c.isupper() for c in password)
 
 def test_password_has_lowercase():
-    """Password should contain at least one lowercase letter"""
-    pool = build_character_pool()
-    password = generate_diverse_password(pool, 16)
+    password = generate_diverse_password(16)
     assert any(c.islower() for c in password)
 
 def test_password_has_digit():
-    """Password should contain at least one digit"""
-    pool = build_character_pool()
-    password = generate_diverse_password(pool, 16)
+    password = generate_diverse_password(16)
     assert any(c.isdigit() for c in password)
 
 def test_password_has_special():
-    """Password should contain at least one special character"""
-    pool = build_character_pool()
-    password = generate_diverse_password(pool, 16)
+    password = generate_diverse_password(16)
     assert any(c in SPECIAL_CHARS for c in password)
 
 def test_passwords_are_unique():
-    """Two generated passwords should not be identical"""
-    pool = build_character_pool()
-    p1 = generate_diverse_password(pool, 16)
-    p2 = generate_diverse_password(pool, 16)
+    p1 = generate_diverse_password(16)
+    p2 = generate_diverse_password(16)
     assert p1 != p2
 
-def test_password_only_uses_pool_chars():
-    """Password should only contain characters from the pool"""
+def test_password_raises_on_empty_pool():
+    with pytest.raises(ValueError, match="At least one"):
+        generate_diverse_password(16, lowercase=False, uppercase=False, numbers=False, special=False)
+
+def test_password_raises_on_too_short():
+    with pytest.raises(ValueError, match="at least 8"):
+        generate_diverse_password(4)
+
+def test_password_raises_on_too_long():
+    with pytest.raises(ValueError, match="cannot exceed 127"):
+        generate_diverse_password(200)
+
+def test_password_only_uses_selected_chars():
     pool = build_character_pool(special=False)
-    password = generate_diverse_password(pool, 16, special=False)
+    password = generate_diverse_password(20, special=False)
     for char in password:
-        assert char in pool
+        assert char in pool, f"Unexpected char '{char}' not in pool"
 
-# ─── WordManager Tests ─────────────────────────────────────────────
 
-def test_word_manager_missing_file():
-    """WordManager should raise FileNotFoundError if words.txt missing"""
-    from word_manager import WordManager
-    with pytest.raises(FileNotFoundError):
-        WordManager(word_file="nonexistent_file.txt")
+def test_entropy_is_positive():
+    entropy = calculate_entropy("MyP@ssw0rd!")
+    assert entropy > 0
 
-def test_word_manager_loads_words(tmp_path):
-    """WordManager should load words correctly from a valid file"""
-    from word_manager import WordManager
-    word_file = tmp_path / "words.txt"
-    word_file.write_text("apple\nbanana\ncherry\norange\ngrape\n")
-    wm = WordManager(word_file=str(word_file))
-    assert wm.get_word_count() == 5
+def test_entropy_increases_with_length():
+    short = calculate_entropy("Ab1!")
+    long = calculate_entropy("Ab1!Ab1!Ab1!Ab1!")
+    assert long > short
 
-def test_get_random_words(tmp_path):
-    """Should return the correct number of random words"""
-    from word_manager import WordManager
-    word_file = tmp_path / "words.txt"
-    word_file.write_text("apple\nbanana\ncherry\norange\ngrape\n")
-    wm = WordManager(word_file=str(word_file))
-    words = wm.get_random_words(3)
-    assert len(words) == 3
+def test_entropy_increases_with_variety():
+    simple = calculate_entropy("aaaaaaaaaaaaaaaa")   # only lowercase
+    complex_ = calculate_entropy("Aa1!Aa1!Aa1!Aa1!")  # all types
+    assert complex_ > simple
 
-def test_get_random_words_are_from_list(tmp_path):
-    """Returned words should all come from the word list"""
-    from word_manager import WordManager
-    word_file = tmp_path / "words.txt"
-    word_file.write_text("apple\nbanana\ncherry\norange\ngrape\n")
-    wm = WordManager(word_file=str(word_file))
-    words = wm.get_random_words(3)
-    for word in words:
-        assert word in ["apple", "banana", "cherry", "orange", "grape"]
+def test_entropy_empty_password():
+    assert calculate_entropy("") == 0.0
 
-def test_get_too_many_words_raises(tmp_path):
-    """Asking for more words than available should raise Exception"""
-    from word_manager import WordManager
-    word_file = tmp_path / "words.txt"
-    word_file.write_text("apple\nbanana\n")
-    wm = WordManager(word_file=str(word_file))
-    with pytest.raises(Exception):
-        wm.get_random_words(10)
+def test_entropy_formula():
+    """Verify entropy matches L * log2(N) for a known pool."""
+    # lowercase only password
+    password = "abcdefghijklmnop"  # 16 chars, lowercase only
+    expected = 16 * math.log2(26)
+    assert abs(calculate_entropy(password) - expected) < 0.01
 
-# ─── Custom Password Validation Tests ──────────────────────────────
 
-def validate_custom_password(password):
-    """Mirrors the validation logic in use_custom_password()"""
-    if not password:
-        return False, "empty"
-    if len(password) < 8:
-        return False, "too_short"
-    if len(password) > 127:
-        return False, "too_long"
-    return True, "ok"
+def test_strength_weak_short_password():
+    result = score_password_strength("abc")
+    assert result["label"] == "Weak"
+    assert result["score"] < 40
+
+def test_strength_common_password():
+    result = score_password_strength("password")
+    assert result["is_common"] == True
+    assert result["score"] == 0
+    assert result["label"] == "Weak"
+
+def test_strength_strong_password():
+    result = score_password_strength("Tr0ub4dor&3XyZ!")
+    assert result["label"] in ["Strong", "Very Strong"]
+    assert result["score"] >= 60
+
+def test_strength_very_strong_password():
+    result = score_password_strength("X9#mK!pL2@nQ8$wR5^vT")
+    assert result["label"] == "Very Strong"
+    assert result["score"] >= 80
+
+def test_strength_returns_entropy():
+    result = score_password_strength("MyP@ssw0rd123!")
+    assert result["entropy"] > 0
+
+def test_strength_suggestions_for_weak():
+    result = score_password_strength("alllowercase")
+    assert len(result["suggestions"]) > 0
+
+def test_strength_no_suggestions_for_very_strong():
+    result = score_password_strength("X9#mK!pL2@nQ8$wR5^vT1&")
+    assert result["label"] == "Very Strong"
+
+def test_strength_empty_password():
+    result = score_password_strength("")
+    assert result["score"] == 0
+    assert result["label"] == "Weak"
+
+def test_common_passwords_list_not_empty():
+    assert len(COMMON_PASSWORDS) > 0
+
+def test_common_passwords_contains_known():
+    assert "password" in COMMON_PASSWORDS
+    assert "123456" in COMMON_PASSWORDS
+
 
 def test_custom_password_valid():
     valid, reason = validate_custom_password("MyP@ssw0rd")
     assert valid == True
+    assert reason == "ok"
 
 def test_custom_password_too_short():
     valid, reason = validate_custom_password("abc")
@@ -195,3 +185,53 @@ def test_custom_password_empty():
     valid, reason = validate_custom_password("")
     assert valid == False
     assert reason == "empty"
+
+def test_custom_password_whitespace_only():
+    valid, reason = validate_custom_password("     ")
+    assert valid == False
+    assert reason == "empty"
+
+def test_custom_password_exactly_8_chars():
+    valid, reason = validate_custom_password("Abcd1234")
+    assert valid == True
+
+def test_custom_password_exactly_127_chars():
+    valid, reason = validate_custom_password("a" * 127)
+    assert valid == True
+
+def test_word_manager_missing_file():
+    from word_manager import WordManager
+    with pytest.raises(FileNotFoundError):
+        WordManager(word_file="nonexistent_file.txt")
+
+def test_word_manager_loads_words(tmp_path):
+    from word_manager import WordManager
+    word_file = tmp_path / "words.txt"
+    word_file.write_text("apple\nbanana\ncherry\norange\ngrape\n")
+    wm = WordManager(word_file=str(word_file))
+    assert wm.get_word_count() == 5
+
+def test_get_random_words(tmp_path):
+    from word_manager import WordManager
+    word_file = tmp_path / "words.txt"
+    word_file.write_text("apple\nbanana\ncherry\norange\ngrape\n")
+    wm = WordManager(word_file=str(word_file))
+    words = wm.get_random_words(3)
+    assert len(words) == 3
+
+def test_get_random_words_from_list(tmp_path):
+    from word_manager import WordManager
+    word_file = tmp_path / "words.txt"
+    word_list = ["apple", "banana", "cherry", "orange", "grape"]
+    word_file.write_text("\n".join(word_list))
+    wm = WordManager(word_file=str(word_file))
+    for word in wm.get_random_words(3):
+        assert word in word_list
+
+def test_get_too_many_words_raises(tmp_path):
+    from word_manager import WordManager
+    word_file = tmp_path / "words.txt"
+    word_file.write_text("apple\nbanana\n")
+    wm = WordManager(word_file=str(word_file))
+    with pytest.raises(Exception):
+        wm.get_random_words(10)
